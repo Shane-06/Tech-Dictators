@@ -1,0 +1,156 @@
+{
+  "info": {
+    "name": "Delivery Failure Predictor API",
+    "description": "API collection for testing backend endpoints",
+    "version": "1.0"
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/health",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["health"]
+        }
+      }
+    },
+    {
+      "name": "Create Delivery",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"customerId\": \"C001\",\n  \"address\": \"123 Main St, New York\",\n  \"lat\": 40.7128,\n  \"lng\": -74.0060,\n  \"scheduledTime\": \"2024-04-18T14:00:00Z\",\n  \"driverId\": \"D001\",\n  \"packageWeight\": 5.5,\n  \"weather\": {\n    \"rain\": 0,\n    \"temp\": 22.5\n  },\n  \"historicalSuccessRate\": 0.85,\n  \"areaRisk\": 0.2\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/deliveries",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["deliveries"]
+        }
+      }
+    },
+    {
+      "name": "Get All Deliveries",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/deliveries",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["deliveries"]
+        }
+      }
+    },
+    {
+      "name": "Get Delivery by ID",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/deliveries/{{delivery_id}}",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["deliveries", "{{delivery_id}}"]
+        }
+      }
+    },
+    {
+      "name": "Update Delivery",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"historicalSuccessRate\": 0.90\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/deliveries/{{delivery_id}}",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["deliveries", "{{delivery_id}}"]
+        }
+      }
+    },
+    {
+      "name": "Optimize Deliveries",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"deliveryIds\": [\"{{delivery_id_1}}\", \"{{delivery_id_2}}\", \"{{delivery_id_3}}\"]\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/deliveries/optimize",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["deliveries", "optimize"]
+        }
+      }
+    },
+    {
+      "name": "Delete Delivery",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/deliveries/{{delivery_id}}",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["deliveries", "{{delivery_id}}"]
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "delivery_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "delivery_id_1",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "delivery_id_2",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "delivery_id_3",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
