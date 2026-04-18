@@ -65,4 +65,4 @@ docker-compose up --build
 - Hour of day, day of week, distance, success rate, weather, area risk
 
 ## Route Optimization
-Cost = distance + (failure_prob * 100), sorted ascending.
+Cost = distance + (failure_prob * 100), sorted ascending."# Tech-Dictators" 
