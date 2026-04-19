@@ -18,7 +18,6 @@ const Navbar: React.FC = () => {
 
         <div className="hidden items-center gap-8 lg:flex">
           <a className="text-base font-bold text-slate-200 hover:text-white transition" href="#predict">Predict</a>
-          <a className="text-base font-bold text-slate-200 hover:text-white transition" href="#features">Features</a>
           <a className="text-base font-bold text-slate-200 hover:text-white transition" href="#contact">Contact</a>
         </div>
 

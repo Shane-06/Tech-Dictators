@@ -11,9 +11,11 @@ interface PredictionResult {
   error?: string;
 }
 
+const PREDICTION_API_URL =
+  import.meta.env.VITE_PREDICTION_API_URL || "http://localhost:8000/predict";
+const WEATHER_API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY || "";
+
 const Card: React.FC = () => {
-  const WEATHER_API_KEY = "160f0f1770fa4c2f8ee214930261804";
-  
   const [formData, setFormData] = useState({
     orderedBefore: "",
     weather: "",
@@ -29,95 +31,79 @@ const Card: React.FC = () => {
   const [weatherInfo, setWeatherInfo] = useState<string>("");
   const formRef = React.useRef<HTMLDivElement>(null);
 
-  const fetchLocationByPincode = async (pincode: string) => {
-    if (!pincode || pincode.length < 5) return;
-    
-    // Check if pincode matches the stored one to avoid redundant fetches
-    if (formData.pincode === pincode && mapPosition) return;
-
+  const fetchPincode = async (lat: number, lng: number) => {
     setPincodeLoading(true);
-    
     try {
-      // Call backend API to fetch pincode coordinates (searches DB first, then external API)
-      const response = await fetch(`http://localhost:3000/locations/pincode/${pincode}`);
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+      );
+
       if (!response.ok) {
-        throw new Error("Location fetch error");
+        throw new Error("Pincode fetch error");
       }
-      
-      const resData = await response.json();
-      
-      if (resData.success && resData.data) {
-        const { latitude, longitude, city, state } = resData.data;
-        setMapPosition([latitude, longitude]);
-        setFormData(prev => ({ 
-          ...prev, 
-          location: `${city}, ${state}`,
-          pincode: pincode
-        }));
-        console.log("Location fetched for pincode:", pincode, `(${city}, ${state})`);
-        // Fetch weather for the coordinates
-        await fetchWeather(latitude, longitude);
-      }
+
+      const data = await response.json();
+      const postalCode = data.address?.postcode || data.address?.postal_code || "N/A";
+
+      setFormData(prev => ({ ...prev, pincode: postalCode }));
+      console.log("Pincode fetched:", postalCode);
     } catch (error) {
       console.error("Pincode fetch error:", error);
-      setWeatherInfo("Unable to fetch location for pincode");
+      setFormData(prev => ({ ...prev, pincode: "N/A" }));
     } finally {
       setPincodeLoading(false);
     }
   };
 
   const fetchWeather = async (lat: number, lng: number) => {
+    if (!WEATHER_API_KEY) {
+      setWeatherInfo("Weather API key not configured");
+      setFormData(prev => ({ ...prev, weather: prev.weather || "cloudy" }));
+      return;
+    }
+
     setWeatherLoading(true);
     try {
-      // Call backend API to fetch weather using coordinates
       const response = await fetch(
-        `http://localhost:3000/locations/weather?latitude=${lat}&longitude=${lng}`
+        `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&appid=${WEATHER_API_KEY}`
       );
-      
+
       if (!response.ok) {
         throw new Error("Weather API error");
       }
-      
-      const data = await response.json();
-      
-      if (data.success && data.data) {
-        const { weather, description, temperature } = data.data;
-        
-        // Update form data with fetched weather
-        setFormData(prev => ({ ...prev, weather: weather }));
-        setWeatherInfo(`${description.charAt(0).toUpperCase() + description.slice(1)} (${temperature}°C)`);
-        
-        console.log("Weather fetched:", weather, `(${description})`);
-      }
-    } catch (error) {
-      console.warn("Weather API fetch failed, using fallback simulated weather.");
-      const simulatedWeathers = ["sunny", "cloudy", "rainy"];
-      const randomWeather = simulatedWeathers[Math.floor(Math.abs(lat + lng) * 100) % 3];
-      const temp = Math.round(20 + (Math.abs(lat) % 15));
-      const desc = randomWeather === "sunny" ? "Clear sky" : randomWeather === "cloudy" ? "Scattered clouds" : "Light rain";
-      
-      setFormData(prev => ({ ...prev, weather: randomWeather }));
-      setWeatherInfo(`${desc} (${temp}°C)`);
 
+      const data = await response.json();
+      const weatherMain = data.weather[0].main.toLowerCase();
+      const description = data.weather[0].description;
+
+      let mappedWeather = "cloudy";
+      if (weatherMain.includes("rain") || weatherMain.includes("drizzle")) {
+        mappedWeather = "rainy";
+      } else if (weatherMain.includes("clear") || weatherMain.includes("sunny")) {
+        mappedWeather = "sunny";
+      } else if (weatherMain.includes("cloud")) {
+        mappedWeather = "cloudy";
+      }
+
+      setFormData(prev => ({ ...prev, weather: mappedWeather }));
+      setWeatherInfo(
+        `${description.charAt(0).toUpperCase() + description.slice(1)} (${Math.round(data.main.temp - 273.15)} deg C)`
+      );
+
+      console.log("Weather fetched:", mappedWeather, `(${description})`);
+    } catch (error) {
+      console.error("Weather fetch error:", error);
+      setWeatherInfo("Unable to fetch weather");
+      setFormData(prev => ({ ...prev, weather: prev.weather || "cloudy" }));
     } finally {
       setWeatherLoading(false);
     }
   };
 
-  const debounceTimer = React.useRef<NodeJS.Timeout | null>(null);
-
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
-    const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
-    
-    if (name === "pincode" && value.length >= 5) {
-      if (debounceTimer.current) clearTimeout(debounceTimer.current);
-      debounceTimer.current = setTimeout(() => {
-        fetchLocationByPincode(value);
-      }, 500); // Wait for the user to finish typing
-    }
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   const handleClear = () => {
@@ -136,7 +122,6 @@ const Card: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validate inputs
     const missingFields = [];
     if (!formData.orderedBefore) missingFields.push("Customer order history");
     if (!formData.traffic) missingFields.push("Traffic level");
@@ -144,19 +129,18 @@ const Card: React.FC = () => {
     if (!formData.weather) missingFields.push("Weather data");
 
     if (missingFields.length > 0) {
-      // Show validation error WITHOUT clearing any inputs
       setResult({
         title: "Missing information",
         summary: `Please fill in: ${missingFields.join(", ")}`,
         reasons: missingFields.map(field => `Missing: ${field}`),
         probability: 0,
         predictionId: "",
-        error: "validation_error"
+        error: "validation_error",
       });
-      // Scroll to error
+
       setTimeout(() => {
         if (formRef.current) {
-          formRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          formRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
         }
       }, 100);
       return;
@@ -166,8 +150,9 @@ const Card: React.FC = () => {
     setResult(null);
 
     try {
-      // Call FastAPI backend
-      const response = await fetch("http://localhost:8000/predict", {
+      const [latitude, longitude] = mapPosition!;
+
+      const response = await fetch(PREDICTION_API_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -176,8 +161,8 @@ const Card: React.FC = () => {
           ordered_before: formData.orderedBefore,
           weather: formData.weather,
           traffic: formData.traffic,
-          latitude: mapPosition[0],
-          longitude: mapPosition[1],
+          latitude,
+          longitude,
         }),
       });
 
@@ -186,10 +171,8 @@ const Card: React.FC = () => {
       }
 
       const data = await response.json();
-
-      // Format result for display
-      const title = `Ideal time delay: ${data.predicted_delay_risk}`;
-      const summary = `${formData.orderedBefore === "yes" ? "Experienced" : "New"} customer · ${formData.traffic} traffic · ${formData.weather} weather · Confidence: ${(data.confidence * 100).toFixed(1)}%`;
+      const title = `Estimated delay risk: ${data.predicted_delay_risk}`;
+      const summary = `${formData.orderedBefore === "yes" ? "Experienced" : "New"} customer | ${formData.traffic} traffic | ${formData.weather} weather | Confidence: ${(data.confidence * 100).toFixed(1)}%`;
 
       setResult({
         title,
@@ -200,22 +183,22 @@ const Card: React.FC = () => {
       });
 
       console.log("Prediction stored with ID:", data.prediction_id);
-      
-      // Scroll to result to show prediction while keeping form visible
+
       setTimeout(() => {
         if (formRef.current) {
-          formRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          formRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
         }
       }, 100);
     } catch (error) {
       console.error("Prediction error:", error);
       setResult({
         title: "Prediction failed",
-        summary: "Unable to connect to the prediction service. Make sure the FastAPI server is running.",
+        summary:
+          "Unable to connect to the prediction service. Make sure the FastAPI server is running.",
         reasons: [],
         probability: 0,
         predictionId: "",
-        error: "connection_error"
+        error: "connection_error",
       });
     } finally {
       setLoading(false);
@@ -223,7 +206,10 @@ const Card: React.FC = () => {
   };
 
   return (
-    <div ref={formRef} className="bg-slate-950/90 border border-slate-800 rounded-[1.75rem] p-6 text-slate-100 shadow-xl shadow-black/30">
+    <div
+      ref={formRef}
+      className="rounded-[1.75rem] border border-slate-800 bg-slate-950/90 p-6 text-slate-100 shadow-xl shadow-black/30"
+    >
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
           <p className="text-sm uppercase tracking-[0.24em] text-violet-300/90">
@@ -236,7 +222,7 @@ const Card: React.FC = () => {
             <button
               type="button"
               onClick={handleClear}
-              className="rounded-3xl bg-slate-700 hover:bg-slate-600 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300 transition"
+              className="rounded-3xl bg-slate-700 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300 transition hover:bg-slate-600"
             >
               Clear Form
             </button>
@@ -249,7 +235,7 @@ const Card: React.FC = () => {
 
       <form className="space-y-5" onSubmit={handleSubmit}>
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">
+          <label className="mb-2 block text-sm font-medium text-slate-300">
             Customer ordered before?
           </label>
           <select
@@ -265,7 +251,7 @@ const Card: React.FC = () => {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">
+          <label className="mb-2 block text-sm font-medium text-slate-300">
             Current traffic level
           </label>
           <select
@@ -282,24 +268,7 @@ const Card: React.FC = () => {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">
-            Pincode
-          </label>
-          <input
-            type="text"
-            name="pincode"
-            value={formData.pincode}
-            onChange={handleChange}
-            placeholder="Enter Pincode (e.g. 515631)"
-            className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-violet-400"
-          />
-          {pincodeLoading && (
-             <p className="text-xs text-violet-400 animate-pulse mt-2">Fetching location...</p>
-          )}
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">
+          <label className="mb-2 block text-sm font-medium text-slate-300">
             Delivery address selected from map
           </label>
           <p className="mb-3 rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-slate-200">
@@ -313,44 +282,63 @@ const Card: React.FC = () => {
             value={formData.location}
             onChange={handleChange}
             placeholder="Or type an address manually"
-            className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-violet-400"
+            className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-violet-400"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">
-            Current Weather
-          </label>
-          <div className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-slate-100 flex items-center justify-between">
+          <label className="mb-2 block text-sm font-medium text-slate-300">Pincode</label>
+          <div className="flex w-full items-center justify-between rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-slate-100">
             <p className="text-slate-200">
-              {weatherLoading ? "Fetching weather..." : weatherInfo ? weatherInfo : "Select location on map"}
+              {pincodeLoading
+                ? "Fetching pincode..."
+                : formData.pincode
+                  ? formData.pincode
+                  : "Select location on map"}
             </p>
-            {weatherLoading && (
-              <span className="text-xs text-violet-400 animate-pulse">Loading...</span>
+            {pincodeLoading && (
+              <span className="animate-pulse text-xs text-violet-400">Loading...</span>
             )}
           </div>
-          <p className="text-xs text-slate-500 mt-2">Auto-detected from selected location</p>
+          <p className="mt-2 text-xs text-slate-500">
+            Auto-filled when you select location on map
+          </p>
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-medium text-slate-300">
+            Current Weather
+          </label>
+          <div className="flex w-full items-center justify-between rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-slate-100">
+            <p className="text-slate-200">
+              {weatherLoading
+                ? "Fetching weather..."
+                : weatherInfo || "Select location on map"}
+            </p>
+            {weatherLoading && (
+              <span className="animate-pulse text-xs text-violet-400">Loading...</span>
+            )}
+          </div>
+          <p className="mt-2 text-xs text-slate-500">Auto-detected from selected location</p>
         </div>
 
         <MapPicker
           position={mapPosition}
           onSelect={(lat, lng) => {
             setMapPosition([lat, lng]);
-            // Only update location, weather, and pincode - preserve other form fields
-            setFormData(prev => ({ 
-              ...prev, 
+            setFormData(prev => ({
+              ...prev,
               location: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
-              pincode: "" // clear pincode as map was manually clicked
             }));
-            // Fetch weather for the selected location (async, won't affect form immediately)
             fetchWeather(lat, lng);
+            fetchPincode(lat, lng);
           }}
         />
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-2xl bg-violet-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full rounded-2xl bg-violet-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-50"
           title="Form values will be preserved after prediction"
         >
           {loading ? "Analyzing..." : "Predict delay risk"}
@@ -358,21 +346,23 @@ const Card: React.FC = () => {
       </form>
 
       {result && (
-        <div className={`mt-6 rounded-[1.5rem] border p-5 text-slate-100 ${
-          result.error 
-            ? 'border-red-500/20 bg-red-900/20' 
-            : 'border-violet-500/20 bg-slate-900/80'
-        }`}>
-          <div className="flex justify-between items-start">
+        <div
+          className={`mt-6 rounded-[1.5rem] border p-5 text-slate-100 ${
+            result.error
+              ? "border-red-500/20 bg-red-900/20"
+              : "border-violet-500/20 bg-slate-900/80"
+          }`}
+        >
+          <div className="flex items-start justify-between">
             <div>
               <p className="text-sm text-slate-400">Prediction Summary</p>
               <p className="mt-3 text-xl font-semibold">{result.title}</p>
               <p className="mt-2 text-sm text-slate-400">{result.summary}</p>
             </div>
-            <div className="text-xs text-slate-500 text-right">
+            <div className="text-right text-xs text-slate-500">
               {mapPosition && (
                 <div className="text-slate-400">
-                  <p>📍 {mapPosition[0].toFixed(4)}, {mapPosition[1].toFixed(4)}</p>
+                  <p>Location: {mapPosition[0].toFixed(4)}, {mapPosition[1].toFixed(4)}</p>
                 </div>
               )}
             </div>
@@ -380,11 +370,11 @@ const Card: React.FC = () => {
 
           {result.reasons && result.reasons.length > 0 && (
             <div className="mt-4">
-              <p className="text-sm font-medium text-slate-300 mb-2">Key Factors:</p>
-              <ul className="text-sm text-slate-400 space-y-1">
+              <p className="mb-2 text-sm font-medium text-slate-300">Key Factors:</p>
+              <ul className="space-y-1 text-sm text-slate-400">
                 {result.reasons.map((reason, idx) => (
                   <li key={idx} className="flex items-start">
-                    <span className="mr-2">•</span>
+                    <span className="mr-2">*</span>
                     <span>{reason}</span>
                   </li>
                 ))}
@@ -393,19 +383,17 @@ const Card: React.FC = () => {
           )}
 
           {result.probability !== undefined && (
-            <div className="mt-4 pt-4 border-t border-slate-700 space-y-3">
-              <div className="flex justify-between items-center text-sm">
+            <div className="mt-4 space-y-3 border-t border-slate-700 pt-4">
+              <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-400">Failure Probability</span>
                 <span className="font-semibold text-violet-300">
                   {(result.probability * 100).toFixed(1)}%
                 </span>
               </div>
               {weatherInfo && (
-                <div className="flex justify-between items-center text-sm">
+                <div className="flex items-center justify-between text-sm">
                   <span className="text-slate-400">Weather Conditions</span>
-                  <span className="font-semibold text-slate-200">
-                    🌤️ {weatherInfo}
-                  </span>
+                  <span className="font-semibold text-slate-200">{weatherInfo}</span>
                 </div>
               )}
             </div>
@@ -416,9 +404,11 @@ const Card: React.FC = () => {
               Prediction ID: {result.predictionId.slice(0, 12)}...
             </div>
           )}
-          
-          <div className="mt-4 pt-4 border-t border-slate-600 text-xs">
-            <p className="text-slate-500">💡 Tip: Your form values are preserved above. Click "Clear Form" to start over.</p>
+
+          <div className="mt-4 border-t border-slate-600 pt-4 text-xs">
+            <p className="text-slate-500">
+              Tip: Your form values are preserved above. Click "Clear Form" to start over.
+            </p>
           </div>
         </div>
       )}
