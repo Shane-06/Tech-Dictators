@@ -100,12 +100,17 @@ const Card: React.FC = () => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleLocationFound = (lat: number, lng: number, city: string, state: string) => {
+  const handleLocationFound = (lat: number, lng: number, city: string, state: string, pincodeFound?: string) => {
     console.log("Location found:", { lat, lng, city, state });
     setMapPosition([lat, lng]);
     setLocationDetails({ city, state });
+    if (pincodeFound) {
+      setFormData(prev => ({ ...prev, pincode: pincodeFound }));
+    }
     fetchWeather(lat, lng);
-    fetchPincode(lat, lng);
+    if (!pincodeFound) {
+      fetchPincode(lat, lng);
+    }
     
     // Scroll down to show the map after animation starts
     setTimeout(() => {

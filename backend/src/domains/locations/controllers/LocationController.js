@@ -13,22 +13,26 @@ class LocationController {
         });
       }
 
-      // Search in database
-      const pincodeData = await Pincode.findOne({ pincode });
+      // Search in database (skip if MongoDB not connected)
+      try {
+        const pincodeData = await Pincode.findOne({ pincode });
 
-      if (pincodeData) {
-        return res.json({
-          success: true,
-          source: 'database',
-          data: {
-            pincode: pincodeData.pincode,
-            latitude: pincodeData.latitude,
-            longitude: pincodeData.longitude,
-            city: pincodeData.city,
-            state: pincodeData.state,
-            country: pincodeData.country,
-          },
-        });
+        if (pincodeData) {
+          return res.json({
+            success: true,
+            source: 'database',
+            data: {
+              pincode: pincodeData.pincode,
+              latitude: pincodeData.latitude,
+              longitude: pincodeData.longitude,
+              city: pincodeData.city,
+              state: pincodeData.state,
+              country: pincodeData.country,
+            },
+          });
+        }
+      } catch (dbErr) {
+        console.warn('MongoDB lookup skipped:', dbErr.message);
       }
 
       // If not in database, fetch from OpenStreetMap (Nominatim) and store
@@ -39,7 +43,11 @@ class LocationController {
             postalcode: pincode,
             country: 'India',
             format: 'json',
+            addressdetails: 1,
             limit: 1,
+          },
+          headers: {
+            'User-Agent': 'TechDictators-DeliveryApp/1.0'
           },
           timeout: 5000,
         }
@@ -52,28 +60,29 @@ class LocationController {
       }
 
       const location = response.data[0];
-      const newPincode = new Pincode({
+      // Parse city/state from address details or display_name fallback
+      const displayParts = (location.display_name || '').split(',').map(s => s.trim());
+      const pincodeResult = {
         pincode,
         latitude: parseFloat(location.lat),
         longitude: parseFloat(location.lon),
-        city: location.address?.city || location.address?.town || 'Unknown',
-        state: location.address?.state || 'Unknown',
+        city: location.address?.city || location.address?.town || location.address?.village || displayParts[0] || 'Unknown',
+        state: location.address?.state || displayParts[displayParts.length - 2] || 'Unknown',
         country: location.address?.country || 'India',
-      });
+      };
 
-      await newPincode.save();
+      // Try to cache in MongoDB (non-blocking)
+      try {
+        const newPincode = new Pincode(pincodeResult);
+        await newPincode.save();
+      } catch (saveErr) {
+        console.warn('Could not cache pincode in DB:', saveErr.message);
+      }
 
       return res.json({
         success: true,
         source: 'external_api',
-        data: {
-          pincode: newPincode.pincode,
-          latitude: newPincode.latitude,
-          longitude: newPincode.longitude,
-          city: newPincode.city,
-          state: newPincode.state,
-          country: newPincode.country,
-        },
+        data: pincodeResult,
       });
     } catch (error) {
       console.error('Error fetching pincode coordinates:', error.message);
@@ -97,36 +106,41 @@ class LocationController {
       }
 
       const response = await axios.get(
-        'https://api.openweathermap.org/data/2.5/weather',
+        'https://api.open-meteo.com/v1/forecast',
         {
           params: {
-            lat: latitude,
-            lon: longitude,
-            appid: weatherApiKey,
+            latitude: latitude,
+            longitude: longitude,
+            current_weather: true,
           },
           timeout: 5000,
         }
       );
 
-      const weatherData = response.data;
-      const weatherMain = weatherData.weather[0].main.toLowerCase();
-      const description = weatherData.weather[0].description;
-
-      // Map to delivery-relevant categories
+      const weatherData = response.data.current_weather;
+      if (!weatherData) throw new Error("Invalid weather data received");
+      
+      const code = weatherData.weathercode;
+      
+      // WMO Weather interpretation codes
       let mappedWeather = 'cloudy';
-      if (
-        weatherMain.includes('rain') ||
-        weatherMain.includes('drizzle') ||
-        weatherMain.includes('thunderstorm')
-      ) {
-        mappedWeather = 'rainy';
-      } else if (
-        weatherMain.includes('clear') ||
-        weatherMain.includes('sunny')
-      ) {
+      let description = 'Cloudy';
+      
+      if (code === 0) {
         mappedWeather = 'sunny';
-      } else if (weatherMain.includes('cloud')) {
+        description = 'Clear sky';
+      } else if (code >= 1 && code <= 3) {
         mappedWeather = 'cloudy';
+        description = 'Partly cloudy';
+      } else if (code >= 51 && code <= 67 || code >= 80 && code <= 82) {
+        mappedWeather = 'rainy';
+        description = 'Rainy';
+      } else if (code >= 95) {
+        mappedWeather = 'rainy';
+        description = 'Thunderstorm';
+      } else if (code >= 45 && code <= 48) {
+        mappedWeather = 'cloudy';
+        description = 'Foggy';
       }
 
       return res.json({
@@ -134,11 +148,11 @@ class LocationController {
         data: {
           weather: mappedWeather,
           description: description,
-          temperature: Math.round(weatherData.main.temp - 273.15),
-          humidity: weatherData.main.humidity,
-          windSpeed: weatherData.wind.speed,
-          cloudiness: weatherData.clouds.all,
-          visibility: weatherData.visibility / 1000, // Convert to km
+          temperature: Math.round(weatherData.temperature),
+          humidity: 50, // Open-meteo current_weather doesn't return humidity by default, we'd need hourly
+          windSpeed: weatherData.windspeed,
+          cloudiness: code >= 1 && code <= 3 ? 50 : (code === 0 ? 0 : 100),
+          visibility: 10,
         },
       });
     } catch (error) {

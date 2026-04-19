@@ -12,11 +12,11 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, classification_report
 
 # Load data
-print("📊 Loading data...")
-df = pd.read_csv("Last_mile_delivery.csv")
+print("Loading data...")
+df = pd.read_csv("../Last_mile_delivery.csv")
 
 # Create target variable
-print("🎯 Creating target variable...")
+print("Creating target variable...")
 df["failure"] = (df["delay_probability"] > 0.6).astype(int)
 
 # Define features
@@ -42,7 +42,7 @@ X = df[features]
 y = df["failure"]
 
 # Split data
-print("🔀 Splitting data...")
+print("Splitting data...")
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42
 )
@@ -51,10 +51,10 @@ X_train, X_test, y_train, y_test = train_test_split(
 neg = (y == 0).sum()
 pos = (y == 1).sum()
 scale = neg / pos
-print(f"⚖️  Class weight scale: {scale:.2f}")
+print(f"Class weight scale: {scale:.2f}")
 
 # Train model
-print("🤖 Training XGBoost model...")
+print("Training XGBoost model...")
 model = XGBClassifier(
     n_estimators=100,
     max_depth=5,
@@ -74,10 +74,10 @@ print("\nClassification Report:")
 print(classification_report(y_test, y_pred))
 
 # Save model
-print("\n💾 Saving model...")
+print("\nSaving model...")
 model_path = os.path.join(os.path.dirname(__file__), 'trained_model.pkl')
 joblib.dump(model, model_path)
-print(f"✓ Model saved to: {model_path}")
+print("Model saved to: {model_path}")
 
-print("\n✅ Ready to use! Start the FastAPI server with:")
+print("\nReady to use! Start the FastAPI server with:")
 print("   python -m uvicorn app.main:app --reload --port 8000")

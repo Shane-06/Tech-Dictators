@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 
 interface PincodeInputProps {
-  onLocationFound: (lat: number, lng: number, city: string, state: string) => void;
+  onLocationFound: (lat: number, lng: number, city: string, state: string, pincodeFound?: string) => void;
   loading?: boolean;
 }
 
@@ -30,9 +30,9 @@ const PincodeInput: React.FC<PincodeInputProps> = ({ onLocationFound, loading = 
           result.data.latitude,
           result.data.longitude,
           result.data.city,
-          result.data.state
+          result.data.state,
+          pincode
         );
-        setPincode("");
       } else if (!response.ok) {
         setError(result.error || "Pincode not found");
       }
