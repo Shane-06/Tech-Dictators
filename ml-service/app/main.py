@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+﻿from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Optional
@@ -29,9 +29,9 @@ async def lifespan(app: FastAPI):
     model_path = os.path.join(os.path.dirname(__file__), 'trained_model.pkl')
     if os.path.exists(model_path):
         model = joblib.load(model_path)
-        print("✓ ML Model loaded successfully")
+        print("âœ“ ML Model loaded successfully")
     else:
-        print("⚠ Model file not found. Model will be trained on first request.")
+        print("âš  Model file not found. Model will be trained on first request.")
     
     # Connect to MongoDB
     mongodb_uri = os.getenv('MONGODB_URI', 'mongodb://localhost:27017')
@@ -41,16 +41,16 @@ async def lifespan(app: FastAPI):
         db = client['delivery_predictions']
         predictions_collection = db['predictions']
         predictions_collection.create_index('timestamp')
-        print("✓ Connected to MongoDB")
+        print("âœ“ Connected to MongoDB")
     except Exception as e:
-        print(f"⚠ MongoDB connection failed: {e}")
+        print(f"âš  MongoDB connection failed: {e}")
     
     yield
     
     # Shutdown
     if db:
         client.close()
-        print("✓ Database connection closed")
+        print("âœ“ Database connection closed")
 
 app = FastAPI(
     title="Delivery Prediction API",
@@ -185,16 +185,17 @@ def generate_reasons(features: dict) -> List[str]:
     
     return reasons
 
-def classify_risk(probability: float) -> str:
-    """Convert probability to risk level"""
-    if probability < 0.25:
-        return "Low"
-    elif probability < 0.50:
-        return "Medium"
-    elif probability < 0.75:
-        return "High"
+def classify_risk(reasons: List[str]) -> str:
+    """Convert number of failure reasons to delay evaluation"""
+    actual_reasons = [r for r in reasons if "Low risk" not in r]
+    num_failures = len(actual_reasons)
+    
+    if num_failures >= 5:
+        return "serious delay"
+    elif num_failures >= 2:
+        return "mild delay"
     else:
-        return "Critical"
+        return "delay is very unlikely"
 
 # ============================================================================
 # API ENDPOINTS
@@ -249,8 +250,8 @@ async def predict(request: PredictionRequest):
         # Step 3: Generate reasons
         reasons = generate_reasons(features_dict)
         
-        # Step 4: Classify risk
-        risk_level = classify_risk(failure_probability)
+        # Step 4: Classify risk based on reasons count
+        risk_level = classify_risk(reasons)
         
         # Step 5: Store to database
         prediction_record = {
@@ -282,9 +283,9 @@ async def predict(request: PredictionRequest):
                 result = predictions_collection.insert_one(prediction_record)
                 prediction_id = str(result.inserted_id)
                 stored_in_db = True
-                print(f"✓ Prediction stored with ID: {prediction_id}")
+                print(f"âœ“ Prediction stored with ID: {prediction_id}")
             except Exception as db_error:
-                print(f"⚠ Database storage failed: {db_error}")
+                print(f"âš  Database storage failed: {db_error}")
                 prediction_id = "db_error"
         else:
             prediction_id = "db_not_connected"
@@ -301,7 +302,7 @@ async def predict(request: PredictionRequest):
         )
     
     except Exception as e:
-        print(f"✗ Prediction error: {str(e)}")
+        print(f"âœ— Prediction error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
 
 @app.get('/predictions')
@@ -324,7 +325,7 @@ async def get_all_predictions(limit: int = 10):
         return {'count': len(predictions), 'predictions': predictions}
     
     except Exception as e:
-        print(f"✗ Fetch error: {str(e)}")
+        print(f"âœ— Fetch error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch predictions: {str(e)}")
 
 @app.get('/predictions/{prediction_id}')
@@ -343,7 +344,7 @@ async def get_prediction(prediction_id: str):
         return prediction
     
     except Exception as e:
-        print(f"✗ Fetch error: {str(e)}")
+        print(f"âœ— Fetch error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch prediction: {str(e)}")
 
 @app.get('/stats')
@@ -369,9 +370,9 @@ async def get_stats():
         }
     
     except Exception as e:
-        print(f"✗ Stats error: {str(e)}")
+        print(f"âœ— Stats error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
 
 if __name__ == '__main__':
     import uvicorn
-    uvicorn.run(app, host='0.0.0.0', port=8000, reload=True)
+    uvicorn.run("main:app", host='0.0.0.0', port=8000, reload=True)

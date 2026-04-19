@@ -47,7 +47,8 @@ const MapPicker: React.FC<MapPickerProps> = ({ position, onSelect }) => {
     if (!mapInstance.current) return;
 
     if (position) {
-      mapInstance.current.setView(position, 8);
+      // Use flyTo for a smooth animation and better zoom level (13) for a specific pincode location
+      mapInstance.current.flyTo(position, 13, { duration: 1.5 });
       if (!markerRef.current) {
         markerRef.current = L.marker(position, { icon: markerIcon }).addTo(mapInstance.current);
       } else {
@@ -65,7 +66,7 @@ const MapPicker: React.FC<MapPickerProps> = ({ position, onSelect }) => {
     };
   }, []);
 
-  return <div ref={mapElement} className="h-72 w-full rounded-3xl border border-slate-800" />;
+  return <div ref={mapElement} className="h-72 w-full rounded-3xl border border-slate-800 relative z-0" />;
 };
 
 export default MapPicker;

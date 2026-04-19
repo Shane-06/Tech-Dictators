@@ -107,4 +107,3 @@ temp/
 .parcel-cache/
 dist-ssr/
 *.tsbuildinfo
-md/

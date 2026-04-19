@@ -10,6 +10,7 @@ const errorHandler = require('./shared/middleware/errorHandler');
 const deliveriesDomain = require('./domains/deliveries');
 const authDomain = require('./domains/auth');
 const driversDomain = require('./domains/drivers');
+const locationsDomain = require('./domains/locations');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -23,7 +24,7 @@ app.use(logger);
 connectDB();
 
 // Register all domain routes dynamically
-const domains = [deliveriesDomain, authDomain, driversDomain];
+const domains = [deliveriesDomain, authDomain, driversDomain, locationsDomain];
 domains.forEach(domain => {
   app.use(domain.path, domain.router);
 });
